@@ -1,0 +1,100 @@
+---
+title: "MachineLearning"
+output: html_document
+---
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+The goal of this project is to predict the manner in which they did the exercise.
+
+```{r, echo=FALSE, results='hide'}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+```
+
+## Loading the provided training dataset
+```{r}
+pml<- read.csv("~/Downloads/pml-training.csv", na.strings=c("NA","","#DIV/0!"))
+```
+
+## Pre-Processing
+Removing any colum that has an NA value and keeping only the completed pml dataset
+```{r}
+isNA<- apply(pml,2,function(x){sum(is.na(x))})
+completePml<- pml[,isNA==0]
+```
+Now removing any columns that are not directly related to the classe outcome.
+```{r}
+finalPml<- completePml[,-c(1:7)]
+```
+
+Creating the "Training" and "Validation" datasets.
+```{r}
+set.seed(312)
+inTrain<- createDataPartition(finalPml$classe, p = 0.7, list = FALSE)
+train<- finalPml[inTrain,]
+validation<- finalPml[-inTrain,]
+```
+
+Removing zero covariates
+```{r}
+nsv<- nearZeroVar(train, saveMetrics = TRUE)
+nsv[nsv$nzv==TRUE,]
+```
+Since no rows were returned we cannot assume that a particular variable is not important to the analysis.
+
+## Analysis with Regression Tree
+
+First we fit a tree to this data and summarize it
+
+```{r}
+set.seed(312)
+fit<- rpart(classe~., data=train)
+prp(fit)
+```
+
+### Cross Validation with the regression tree on Validation dataset
+
+We are checking the performance of the regression tree.
+```{r}
+tree.pred<- predict(fit, newdata= validation, type = "class")
+tablePred<- table(validation$classe, tree.pred)
+sum(diag(tablePred))/sum(as.vector(tablePred))
+```
+
+Thus we get a prediction accuracy of ~76% and an out of sample error rate as ~24% for this regression tree
+
+## Analysis with Random Forests
+
+Here we will fit a Random forest to help increase the model accuracy and reduce out of sample error.
+
+```{r}
+set.seed(312)
+modFit<- randomForest(classe~., data=train, ntree = 100, importance = TRUE)
+varImpPlot(modFit)
+```
+
+### Cross Validation with the Random Forest on Validation dataset
+
+Here we are checking the performance of the Random Forest
+```{r}
+rf.pred<- predict(modFit, newdata= validation, type="class")
+predTable<- table(validation$classe, rf.pred)
+sum(diag(predTable))/sum(as.vector(predTable))
+```
+
+Thus we get a prediction accuracy of ~99.4% and an out of sample error of ~0.6%
+ 
+## Making Predictions
+
+In conclusion, we can now predict values of classe for the original testing data set provided for the assignment.
+
+```{r}
+pml_testing<- read.csv("~/Downloads/pml-testing.csv")
+predict(modFit, pml_testing, type = "class")
+```
+
+These are the answers for the coursera assignment.
+
+We can observe that the random forest is very good in making these kinds of predictions as we can see from the out of sample erroe at around 0.6%
